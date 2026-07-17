@@ -1,0 +1,195 @@
+name: Native release builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional vX.Y.Z tag to create/update a GitHub Release; leave blank for build artifacts only"
+        required: false
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate product and release metadata
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Validate package, Android, and release tag versions
+        run: node scripts/release-metadata.mjs --check
+      - name: Run product tests
+        run: npm test
+
+  windows:
+    name: Windows x64 NSIS installer
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Build NSIS installer
+        run: npm run desktop:build:win
+      - name: Give the Windows installer a stable release name
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem -LiteralPath release -Filter *.exe -File)
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly one Windows installer, found $($installers.Count)."
+          }
+          $assetName = node scripts/release-metadata.mjs --asset windows
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Copy-Item -LiteralPath $installers[0].FullName -Destination (Join-Path release-assets $assetName)
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: afterglow-windows-x64
+          path: release-assets/*.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  linux:
+    name: Linux x64 AppImage and deb
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Build AppImage and deb packages
+        run: npm run desktop:build:linux
+      - name: Give Linux packages stable release names
+        shell: bash
+        run: |
+          shopt -s nullglob
+          appimages=(release/*.AppImage)
+          debs=(release/*.deb)
+          if [[ ${#appimages[@]} -ne 1 || ${#debs[@]} -ne 1 ]]; then
+            echo "Expected one AppImage and one deb; found ${#appimages[@]} AppImage and ${#debs[@]} deb files." >&2
+            exit 1
+          fi
+          mkdir -p release-assets
+          cp -- "${appimages[0]}" "release-assets/$(node scripts/release-metadata.mjs --asset linux-appimage)"
+          cp -- "${debs[0]}" "release-assets/$(node scripts/release-metadata.mjs --asset linux-deb)"
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: afterglow-linux-x64
+          path: |
+            release-assets/*.AppImage
+            release-assets/*.deb
+          if-no-files-found: error
+          retention-days: 30
+
+  android:
+    name: Android sideload debug APK
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Use Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Sync the native Android project
+        run: npm run mobile:sync -- android
+      - name: Build installable debug APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - name: Give the APK a stable release name
+        run: |
+          mkdir -p release-assets
+          cp -- android/app/build/outputs/apk/debug/app-debug.apk "release-assets/$(node scripts/release-metadata.mjs --asset android)"
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: afterglow-android-debug
+          path: release-assets/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish installers to GitHub Releases
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
+    needs:
+      - windows
+      - linux
+      - android
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Download all native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Generate checksums and website download metadata
+        shell: bash
+        run: |
+          node scripts/release-metadata.mjs --check
+          node scripts/release-metadata.mjs --repository "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG" --output release-assets/availability.json
+          checksum_name=$(node scripts/release-metadata.mjs --asset checksums)
+          cd release-assets
+          sha256sum -- *.exe *.AppImage *.deb *.apk > "$checksum_name"
+      - name: Create or update the GitHub Release
+        shell: bash
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "Afterglow ${RELEASE_TAG#v}" --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          release_url=$(gh release view "$RELEASE_TAG" --json url --jq .url)
+          echo "Published native installers: $release_url" >> "$GITHUB_STEP_SUMMARY"

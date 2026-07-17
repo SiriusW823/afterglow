@@ -1,0 +1,102 @@
+{
+  "name": "afterglow-desk-companion",
+  "version": "0.1.0",
+  "description": "A local-first focus timer with optional end-to-end encrypted device sync.",
+  "author": "Afterglow contributors",
+  "license": "MIT",
+  "private": true,
+  "main": "desktop/main.mjs",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "vinext dev",
+    "build": "vinext build",
+    "start": "vinext start",
+    "native:build": "vite build --config vite.native.config.ts",
+    "pages:build": "npm run native:build && node scripts/prepare-pages.mjs",
+    "desktop:start": "electron desktop/main.mjs",
+    "desktop:build": "npm run native:build && electron-builder",
+    "desktop:build:win": "npm run native:build && electron-builder --win nsis --x64",
+    "desktop:build:linux": "npm run native:build && electron-builder --linux AppImage deb --x64",
+    "mobile:sync": "npm run native:build && cap sync && node scripts/fix-capacitor-generated.mjs",
+    "android:open": "npm run mobile:sync && cap open android",
+    "ios:open": "npm run mobile:sync && cap open ios",
+    "lint": "eslint app worker vite.config.ts --ignore-pattern dist --ignore-pattern .next",
+    "test": "node --test --experimental-strip-types tests/*.test.ts"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.4.2",
+    "@capacitor/core": "8.4.2",
+    "@capacitor/filesystem": "8.1.2",
+    "@capacitor/ios": "8.4.2",
+    "@capacitor/local-notifications": "8.2.0",
+    "@capacitor/share": "8.0.1",
+    "next": "16.2.10",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.4.2",
+    "@tailwindcss/postcss": "4.2.1",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitejs/plugin-rsc": "0.5.26",
+    "electron": "43.1.1",
+    "electron-builder": "26.15.3",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.10",
+    "react-server-dom-webpack": "19.2.6",
+    "tailwindcss": "4.2.1",
+    "typescript": "5.9.3",
+    "vinext": "0.0.50",
+    "vite": "8.1.4"
+  },
+  "build": {
+    "appId": "com.afterglow.focus",
+    "productName": "Afterglow",
+    "asar": true,
+    "npmRebuild": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "native-dist/**/*",
+      "desktop/**/*",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "artifactName": "afterglow-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "icon": "public/icon-512.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "linux": {
+      "icon": "public/icon-512.png",
+      "category": "Utility",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
+  },
+  "overrides": {
+    "postcss": "8.5.10"
+  },
+  "type": "module"
+}

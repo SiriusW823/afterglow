@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Afterglow</string>
+    <string name="title_activity_main">Afterglow</string>
+    <string name="package_name">com.afterglow.focus</string>
+    <string name="custom_url_scheme">com.afterglow.focus</string>
+</resources>
