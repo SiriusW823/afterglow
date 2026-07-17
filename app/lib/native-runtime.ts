@@ -2,6 +2,7 @@ import { Capacitor, CapacitorHttp, type HttpOptions, type HttpResponse } from "@
 import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { Share } from "@capacitor/share";
+import packageMetadata from "../../package.json" with { type: "json" };
 
 export type NativePlatform = "web" | "windows" | "linux" | "macos" | "android" | "ios";
 
@@ -43,10 +44,17 @@ declare global {
 
 const NATIVE_TIMER_NOTIFICATION_ID = 1_964_072_015;
 const NATIVE_STORAGE_LIMITS = Object.freeze({ snapshot: 16 * 1024 * 1024, "sync-config": 64 * 1024 });
-// GitHub Pages is static hosting and cannot provide the ciphertext relay. Keep
-// the binary transport testable without silently contacting a retired service.
-export const SYNC_RELAY_CONFIGURED = false;
-export const NATIVE_SYNC_ENDPOINT = "https://sync.afterglow.invalid/api/private-sync";
+const configuredSyncEndpoint = packageMetadata.afterglow.syncEndpoint;
+const validSyncEndpoint = (() => {
+  try {
+    const url = new URL(configuredSyncEndpoint);
+    return url.protocol === "https:" && url.pathname === "/api/private-sync" && !url.username && !url.password && !url.search && !url.hash;
+  } catch {
+    return false;
+  }
+})();
+export const SYNC_RELAY_CONFIGURED = packageMetadata.afterglow.syncRelayConfigured === true && validSyncEndpoint;
+export const NATIVE_SYNC_ENDPOINT = configuredSyncEndpoint;
 
 function desktopBridge() {
   return typeof window === "undefined" ? undefined : window.afterglowDesktop;

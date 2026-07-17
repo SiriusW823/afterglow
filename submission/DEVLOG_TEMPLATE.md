@@ -23,7 +23,7 @@ Use this alongside Hackatime. Record only work you personally completed and can 
 - Accessibility, keyboard interactions, reduced motion, and focus management
 - Browser-preview IndexedDB compatibility, import validation, JSON backup, and CSV export
 - End-to-end encrypted pairing, deterministic merge, rollback handling, 4 MiB limits, and threat modeling
-- Sites relay access investigation and public two-device verification—record deployment as complete only after signed-out/native testing passes
+- Durable Objects relay architecture, transactional 1 MiB ciphertext chunking, and public two-device verification
 - GitHub Actions packaging, stable artifact names, release checksums, and manifest generation—record a Release only after it really exists
 - Testing, debugging, documentation, screenshots, and demo production
 
@@ -33,6 +33,6 @@ Use this alongside Hackatime. Record only work you personally completed and can 
 - Building an unsigned Windows x64 NSIS preview is not the same as signing or publishing a Windows release.
 - A Linux `.deb`/AppImage or Android debug-signed APK is “published” only after the exact artifact can be downloaded from the public Release.
 - Android debug signing is not a stable production update key. Document API 26+ and the signing limitation.
-- Sync crypto and relay code can be logged as implemented/tested, but “public sync released” requires a separately hosted relay and a successful unauthenticated two-device test. The current release deliberately leaves the relay unconfigured.
+- Sync can be logged as publicly available only after the separately hosted relay, unauthenticated 401 check, two-device merge, oversized chunk round trip, and cleanup all pass. Distinguish this evidence from a formal security audit.
 - iOS source work is not an iOS release; Xcode compilation, Apple signing, and distribution require separate work on macOS.
 - Manually added Afterglow sessions are product data, not proof of Hackatime development hours.

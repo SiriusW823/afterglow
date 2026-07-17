@@ -3,10 +3,13 @@ import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, ipcMain } from "electron";
+import packageMetadata from "../package.json" with { type: "json" };
 
-// The release UI keeps sync disabled until an independently hosted relay has
-// been published and tested. This reserved URL preserves a strict IPC allowlist.
-const PRODUCTION_SYNC_URL = "https://sync.afterglow.invalid/api/private-sync";
+const PRODUCTION_SYNC_URL = packageMetadata.afterglow.syncEndpoint;
+const parsedSyncUrl = new URL(PRODUCTION_SYNC_URL);
+if (packageMetadata.afterglow.syncRelayConfigured !== true || parsedSyncUrl.protocol !== "https:" || parsedSyncUrl.pathname !== "/api/private-sync" || parsedSyncUrl.username || parsedSyncUrl.password || parsedSyncUrl.search || parsedSyncUrl.hash) {
+  throw new TypeError("Afterglow requires one valid HTTPS private-sync endpoint.");
+}
 const MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024;
 const MAX_SYNC_CONFIG_BYTES = 64 * 1024;
 const MAX_SYNC_BODY_BYTES = 4 * 1024 * 1024;
@@ -288,7 +291,8 @@ function registerIpc() {
 async function createWindow() {
   const developmentUrl = configuredDevelopmentUrl();
   developmentOrigin = developmentUrl?.origin ?? null;
-  const rendererFile = path.join(app.getAppPath(), "native-dist", "index.html");
+  const applicationRoot = app.isPackaged ? app.getAppPath() : path.resolve(import.meta.dirname, "..");
+  const rendererFile = path.join(applicationRoot, "native-dist", "index.html");
   rendererFileUrl = pathToFileURL(rendererFile).href;
 
   const window = new BrowserWindow({
@@ -296,11 +300,11 @@ async function createWindow() {
     height: 800,
     minWidth: 360,
     minHeight: 640,
-    show: false,
+    show: true,
     backgroundColor: "#f4efe8",
     autoHideMenuBar: true,
     webPreferences: {
-      preload: path.join(app.getAppPath(), "desktop", "preload.mjs"),
+      preload: path.join(applicationRoot, "desktop", "preload.mjs"),
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
@@ -311,6 +315,15 @@ async function createWindow() {
   });
 
   mainWindow = window;
+  window.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    if (level >= 2) console.error(`Afterglow renderer: ${message} (${sourceId}:${line})`);
+  });
+  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedUrl) => {
+    console.error(`Afterglow failed to load ${validatedUrl}: ${errorDescription} (${errorCode})`);
+  });
+  window.webContents.on("render-process-gone", (_event, details) => {
+    console.error(`Afterglow renderer exited: ${details.reason} (${details.exitCode})`);
+  });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-attach-webview", (event) => event.preventDefault());
   window.webContents.on("will-navigate", (event, url) => {
@@ -319,7 +332,6 @@ async function createWindow() {
   window.webContents.on("will-redirect", (event, url) => {
     if (!isTrustedRendererUrl(url)) event.preventDefault();
   });
-  window.once("ready-to-show", () => window.show());
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = null;
   });
@@ -340,9 +352,13 @@ if (!singleInstance) {
     mainWindow.focus();
   });
 
-  await app.whenReady();
-  registerIpc();
-  await createWindow();
+  void app.whenReady().then(async () => {
+    registerIpc();
+    await createWindow();
+  }).catch((error) => {
+    console.error("Afterglow failed to initialize.", error);
+    app.exit(1);
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();

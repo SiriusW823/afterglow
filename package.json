@@ -1,10 +1,14 @@
 {
   "name": "afterglow-desk-companion",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A local-first focus timer with optional end-to-end encrypted device sync.",
   "author": "Afterglow contributors",
   "license": "MIT",
   "private": true,
+  "afterglow": {
+    "syncRelayConfigured": true,
+    "syncEndpoint": "https://afterglow-private-sync.sirius823935.workers.dev/api/private-sync"
+  },
   "main": "desktop/main.mjs",
   "engines": {
     "node": ">=22.13.0"
@@ -20,6 +24,10 @@
     "desktop:build:win": "npm run native:build && electron-builder --win nsis --x64 --publish never",
     "desktop:build:linux": "npm run native:build && electron-builder --linux AppImage deb --x64 --publish never",
     "mobile:sync": "npm run native:build && cap sync && node scripts/fix-capacitor-generated.mjs",
+    "sync:types": "wrangler types --config wrangler.sync.jsonc .wrangler/sync-env.d.ts",
+    "sync:check": "wrangler deploy --dry-run --config wrangler.sync.jsonc --outdir .wrangler/sync-dry-run",
+    "sync:deploy": "wrangler deploy --config wrangler.sync.jsonc",
+    "sync:verify": "node --experimental-strip-types scripts/verify-sync-relay.ts",
     "android:open": "npm run mobile:sync && cap open android",
     "ios:open": "npm run mobile:sync && cap open ios",
     "lint": "eslint app worker vite.config.ts --ignore-pattern dist --ignore-pattern .next",
@@ -52,7 +60,8 @@
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
     "vinext": "0.0.50",
-    "vite": "8.1.4"
+    "vite": "8.1.4",
+    "wrangler": "4.110.0"
   },
   "build": {
     "appId": "com.afterglow.focus",

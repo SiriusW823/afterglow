@@ -9,10 +9,10 @@ function base64(bytes: Uint8Array) {
   return Buffer.from(bytes).toString("base64");
 }
 
-test("the retired preview relay cannot be contacted by release code", () => {
-  assert.equal(SYNC_RELAY_CONFIGURED, false);
-  assert.equal(new URL(NATIVE_SYNC_ENDPOINT).hostname.endsWith(".invalid"), true);
-  assert.throws(() => nativeSyncOptions(), /not configured/i);
+test("release code accepts only the configured production relay and keeps browser preview transport disabled", () => {
+  assert.equal(SYNC_RELAY_CONFIGURED, true);
+  assert.equal(NATIVE_SYNC_ENDPOINT, "https://afterglow-private-sync.sirius823935.workers.dev/api/private-sync");
+  assert.deepEqual(nativeSyncOptions(), {});
 });
 
 test("Capacitor sync sends encrypted bytes as file base64 without UTF-8 conversion", async () => {

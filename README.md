@@ -1,6 +1,6 @@
 # Afterglow
 
-Afterglow is a bilingual, local-first focus companion that turns completed work into a glowing city. The ongoing-use product is packaged as installed native apps: Electron on Windows/Linux and Capacitor on Android/iOS. Native working data stays in each app's private local storage. The encrypted-sync client exists, but the current release deliberately leaves its relay unconfigured instead of contacting the retired preview service.
+Afterglow is a bilingual, local-first focus companion that turns completed work into a glowing city. The ongoing-use product is packaged as installed native apps: Electron on Windows/Linux and Capacitor on Android/iOS. Native working data stays in each app's private local storage. Installed apps can optionally pair without an account and synchronize an end-to-end encrypted copy through a separately deployed Cloudflare Worker backed by SQLite Durable Objects.
 
 The website is now only a browser preview and native-download center. It is deliberately **not** offered as an installable or offline PWA: there is no Web App manifest, Service Worker, browser installation prompt, or offline app shell. Browser storage is best-effort and is not the supported place for durable records.
 
@@ -8,27 +8,22 @@ The website is now only a browser preview and native-download center. It is deli
 
 **Source repository:** https://github.com/SiriusW823/afterglow
 
-**Current release:** https://github.com/SiriusW823/afterglow/releases/tag/v0.1.0
+**Current release:** https://github.com/SiriusW823/afterglow/releases/tag/v0.2.0
 
 ## Current release status
 
-Version `v0.1.0` is published from the public repository. GitHub Pages exposes only the preview and the same native artifacts attached to the GitHub Release:
+Version `v0.2.0` is built from the public repository. GitHub Pages exposes only the preview and the same native artifacts attached to the GitHub Release:
 
 | Area | Current fact | Remaining limitation |
 | --- | --- | --- |
-| Website | GitHub Pages is live at `https://siriusw823.github.io/afterglow/`; its Windows, Linux, and Android buttons resolve to the published `v0.1.0` Release assets. | It is a browser preview/download center, not a PWA or durable-data product. |
-| Encrypted sync | Client crypto, merge logic, the reference Worker relay, Electron bridge, and Capacitor binary adapter are implemented and tested. No relay is configured in the shipped UI, so no sync traffic is sent. | Independently host and audit a public relay, configure a new endpoint, then run real two-device create/join/update/delete tests before describing sync as available. |
-| Windows x64 | The unsigned NSIS installer is published as `afterglow-0.1.0-windows-x64.exe`. | It may trigger SmartScreen because it is not code-signed; clean-device installation still needs manual verification. |
+| Website | GitHub Pages is live at `https://siriusw823.github.io/afterglow/`; its Windows, Linux, and Android buttons resolve only to verified `v0.2.0` Release assets. | It is a browser preview/download center, not a PWA or durable-data product. |
+| Encrypted sync | The installed apps use AES-256-GCM, deterministic client-side merge, ETag preconditions, and the production Worker at `afterglow-private-sync.sirius823935.workers.dev`. A two-client create/join/update/delete test and a 3 MiB chunked-envelope round trip pass against the public relay. | This is an independently hosted service, not a formal third-party security audit. Cloudflare can observe IP address, request time, and encrypted payload size. |
+| Windows x64 | The unsigned NSIS installer is published as `afterglow-0.2.0-windows-x64.exe`. | It may trigger SmartScreen because it is not code-signed; clean-device installation still needs manual verification. |
 | Linux x64 | AppImage and `.deb` packages are published for x64. | Clean-device installation still needs manual verification. |
-| Android | A debug-signed sideload APK is published for Android 8.0/API 26 or newer. | Clean-device installation still needs manual verification. A stable private signing key is needed for reliable in-place updates. |
+| Android | A `v0.2.0` debug-signed sideload APK is published for Android 8.0/API 26 or newer. | Clean-device installation still needs manual verification. A stable private signing key is needed for reliable in-place updates. |
 | iOS/iPadOS | Capacitor/Xcode source exists; there is no installable iOS artifact. | Build on macOS and complete Apple signing and an appropriate distribution path. |
 
-The Release also includes `afterglow-0.1.0-SHA256SUMS.txt` and a generated `availability.json`. CI reported these installer checksums:
-
-- Windows EXE: `0edaa899127899bd22fe70b058cfec47800dd696ceeaed92a002a8a178facb1f`
-- Linux AppImage: `496ef0b0256afe906f14bc3ac1b5902f4a57492d961f676078640a2c5deffe82`
-- Linux `.deb`: `0fcec197b84ee62212a49f682aea8ff1b9c1916d10bda479051ddd67d315f848`
-- Android APK: `272592d2e8cd330951233795713cd4647146b31dbb3d5dc340cf217ef3938a2d`
+The Release also includes `afterglow-0.2.0-SHA256SUMS.txt` and a generated `availability.json`; use those published checksums rather than values copied into this document.
 
 ## Product principles
 
@@ -51,7 +46,7 @@ The Release also includes `afterglow-0.1.0-SHA256SUMS.txt` and a generated `avai
 - English and Traditional Chinese with a visible language switch
 - Versioned JSON backup/restore, CSV export, bounded imports, and a native Filesystem + Share path on mobile
 - Keyboard shortcuts, semantic controls, visible focus styles, reduced motion, safe areas, and 44 px touch targets
-- Account-free end-to-end encrypted sync implementation kept visibly unavailable until a separate relay is published and device-tested
+- Optional account-free end-to-end encrypted synchronization in installed apps, with immediate upload after local changes and a 30-second remote refresh interval
 
 ## Timer rhythm and custom minutes
 
@@ -95,27 +90,27 @@ When Android/iOS notification permission is granted, starting or resuming a time
 
 Shortcuts do not fire while typing in an input, select, textarea, or button.
 
-## Encrypted sync design and current blocker
+## Encrypted sync design
 
-Encrypted sync is implemented but remains a **pre-release capability**, not a working public service. GitHub Pages is static hosting and cannot run a ciphertext relay. The release therefore sets `SYNC_RELAY_CONFIGURED` to `false`, hides setup controls, performs no automatic sync requests, and offers JSON backup/restore for moving data. The retired preview URL has been removed from the renderer, native bridges, documentation, and Content Security Policy.
-
-Once a separately hosted and audited relay is publicly reachable, the intended flow is:
+GitHub Pages remains static and never handles synchronization. Installed Electron and Capacitor apps set `SYNC_RELAY_CONFIGURED` to `true` and use the separately deployed HTTPS Worker; the browser preview keeps native sync controls unavailable. The flow is:
 
 1. A device creates a random room identifier and root secret.
 2. HKDF-SHA-256 derives separate encryption and opaque locator keys.
 3. The client encrypts a canonical snapshot with AES-256-GCM.
-4. Only the encrypted binary envelope is sent to the relay/R2 object store.
+4. Only the encrypted binary envelope is sent to the room's SQLite-backed Durable Object.
 5. ETag preconditions force concurrent devices to re-read and merge instead of blindly overwriting one another.
 
-The client and Worker both enforce a **4 MiB maximum encrypted envelope**. The Worker hashes the opaque room capability again for the R2 key, disables caching, and never receives the root secret or plaintext app records.
+The client and Worker both enforce a **4 MiB maximum encrypted envelope**. The Worker hashes the opaque room capability again before selecting a room object. Because one Durable Objects SQLite BLOB is limited to 2 MB, the relay transactionally stores 1 MiB ciphertext chunks and an ETag; it disables caching and never receives the root secret or plaintext app records.
 
 Native transports preserve encrypted bytes without text conversion:
 
 - Electron uses a narrow IPC sync bridge.
 - Android/iOS use `CapacitorHttp` with a file/base64 binary adapter, strict base64 validation, a fixed endpoint allowlist, redirects disabled, and bounded timeouts.
-- A future browser integration can use a deliberately configured HTTPS endpoint.
+- The GitHub Pages browser preview deliberately has no sync transport.
 
-There is no account system and no plaintext cloud database. That does **not** make future relay sync cloud-free: a relay object store would hold ciphertext and ordinary metadata, while hosting/network providers could observe request time, IP address, and encrypted payload size. The current release has no configured relay.
+There is no account system and no plaintext cloud database. This does **not** make synchronization cloud-free: Cloudflare Durable Objects hold ciphertext chunks and ordinary storage metadata, while Cloudflare and network providers can observe request time, IP address, and encrypted payload size. Turning sync off leaves the app strictly local-first; JSON backup/restore remains independent of the relay.
+
+Installed apps upload shortly after a local change and also synchronize on launch, reconnect, focus/visibility changes, and every 30 seconds while active. This provides automatic cross-device continuity, but it is accurately described as near-real-time polling rather than a permanent WebSocket connection.
 
 ### Data intended to be shared
 
@@ -153,6 +148,9 @@ The native renderer is a static Vite build shared by Electron and Capacitor.
 | `npm run desktop:build:win` | Build an unsigned Windows x64 NSIS preview installer. |
 | `npm run desktop:build:linux` | Build Linux x64 AppImage and `.deb` artifacts on Linux. |
 | `npm run mobile:sync` | Build and sync the renderer, configuration, and plugins into Android and iOS projects. |
+| `npm run sync:check` | Dry-run the standalone Durable Objects relay build. |
+| `npm run sync:deploy` | Deploy the standalone relay to Cloudflare Workers. |
+| `npm run sync:verify` | Run an ephemeral two-client and 3 MiB ciphertext round trip, then delete both test rooms. |
 | `npm run android:open` | Sync, then open the Android project in Android Studio. |
 | `npm run ios:open` | Sync, then open the iOS project in Xcode on macOS. |
 
@@ -171,7 +169,7 @@ The tag must match `package.json`, and Android `versionName` must match it. A pu
 
 `.github/workflows/pages.yml` builds `native-dist/`, adds the static metadata files, and deploys the artifact through GitHub Pages. On every successful native-release workflow run, it checks whether the matching GitHub Release exists and regenerates `native-dist/downloads/availability.json` with direct EXE, AppImage, and APK links. Until those real files exist, the interface truthfully displays “Installer not available yet.”
 
-The repository is connected at `SiriusW823/afterglow`, Pages uses GitHub Actions as its source, and the `v0.1.0` native release workflow has published all four platform files. To publish a future version:
+The repository is connected at `SiriusW823/afterglow`, Pages uses GitHub Actions as its source, and the native release workflow publishes all four platform files. To publish a future version:
 
 1. Update the package and Android versions together and push `main`.
 2. Push the matching `vX.Y.Z` tag or manually run **Native release builds** with that `release_tag`.
@@ -180,7 +178,7 @@ The repository is connected at `SiriusW823/afterglow`, Pages uses GitHub Actions
 For local inspection of the exact metadata that the workflow will generate:
 
 ```bash
-node scripts/release-metadata.mjs --repository SiriusW823/afterglow --tag v0.1.0 --output native-dist/downloads/availability.json
+node scripts/release-metadata.mjs --repository SiriusW823/afterglow --tag v0.2.0 --output native-dist/downloads/availability.json
 ```
 
 `node scripts/release-metadata.mjs --check` validates the shared package/Android version and rejects a mismatched release tag.
@@ -194,7 +192,7 @@ npm run build
 npm run pages:build
 ```
 
-The automated suite covers the non-PWA browser-preview contract, GitHub Pages paths, disabled retired-relay behavior, timer recovery, five-minute duration steps, timer-rhythm placement, translations, statistics, native storage/export contracts, scheduled native notifications, Android API 26, CapacitorHttp binary transport, encrypted pairing and AES-GCM envelopes, deterministic merge behavior, 4 MiB relay limits, conditional relay writes, and release metadata. The public Pages/download URLs and CI packaging are verified; clean-device installation, relay publication, iOS distribution, and signed desktop/Android distribution still require external verification.
+The automated suite covers the non-PWA browser-preview contract, GitHub Pages paths, native-only production relay configuration, timer recovery, five-minute duration steps, timer-rhythm placement, translations, statistics, native storage/export contracts, scheduled native notifications, Android API 26, CapacitorHttp binary transport, encrypted pairing and AES-GCM envelopes, deterministic merge behavior, 4 MiB relay limits, conditional relay writes, and release metadata. The production relay additionally passes a real two-client merge and 3 MiB chunked ciphertext round trip. Clean-device installation, iOS distribution, a formal security audit, and signed desktop/Android distribution still require external verification.
 
 ## Project structure
 
@@ -203,7 +201,8 @@ The automated suite covers the non-PWA browser-preview contract, GitHub Pages pa
 - `app/lib/local-store.ts` — native records plus best-effort IndexedDB/localStorage browser-preview persistence
 - `app/lib/native-runtime.ts` — Electron storage/IPC, Capacitor Filesystem/Share, notifications, and native binary sync adapters
 - `app/lib/private-sync.ts` — pairing codes, key derivation, AES-GCM envelopes, merge, rollback checks, and the 4 MiB client limit
-- `worker/index.ts` — unconfigured reference Worker for a future bounded, no-store ciphertext relay
+- `worker/sync-relay.ts` — standalone SQLite Durable Objects ciphertext relay with transactional 1 MiB chunks
+- `worker/private-sync.ts` — authorization, 4 MiB request bounds, ETag preconditions, and no-store response policy
 - `desktop/` — sandboxed Electron main process and narrow preload bridge
 - `android/` and `ios/` — Capacitor native source projects
 - `native/` and `vite.native.config.ts` — shared static native renderer entry and build configuration
