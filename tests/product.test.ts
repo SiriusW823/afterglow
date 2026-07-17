@@ -264,6 +264,9 @@ test("native download copy identifies architecture and preview signing status", 
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   assert.match(packageJson.scripts["desktop:build:win"], /--win nsis --x64/);
   assert.match(packageJson.scripts["desktop:build:linux"], /--linux AppImage deb --x64/);
+  assert.match(packageJson.scripts["desktop:build:win"], /--publish never/);
+  assert.match(packageJson.scripts["desktop:build:linux"], /--publish never/);
+  assert.match(packageJson.build.linux.maintainer, /@users\.noreply\.github\.com/);
   assert.match(translations.en.downloadWindows, /x64/i);
   assert.match(translations.en.downloadLinux, /x64/i);
   assert.match(translations.en.downloadAndroid, /debug APK/i);
