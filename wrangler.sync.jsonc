@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "afterglow-private-sync",
+  "main": "worker/sync-relay.ts",
+  "compatibility_date": "2026-07-17",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.05
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SYNC_ROOMS",
+        "class_name": "SyncRoom"
+      }
+    ]
+  },
+  "exports": {
+    "SyncRoom": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  }
+}

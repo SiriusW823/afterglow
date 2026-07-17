@@ -304,6 +304,7 @@ export default function Home() {
   const syncChannelRef = useRef<BroadcastChannel | null>(null);
   const copy = translations[language];
   const running = endAt !== null;
+  const syncAvailable = SYNC_RELAY_CONFIGURED && nativeApp;
 
   const tr = useCallback((key: CopyKey, values?: Record<string, string | number>) => {
     const value = copy[key];
@@ -461,7 +462,7 @@ export default function Home() {
         }
         setSyncSetupOpen(false);
         setPairingCode(code);
-        setSyncStatus(SYNC_RELAY_CONFIGURED ? (navigator.onLine ? "ready" : "offline") : "error");
+        setSyncStatus(SYNC_RELAY_CONFIGURED && isNativeApp() ? (navigator.onLine ? "ready" : "offline") : "error");
         setSyncConfigLoaded(true);
       } catch {
         if (!cancelled && requestId === refreshId) {
@@ -694,7 +695,7 @@ export default function Home() {
 
   const performSync = useCallback(async (overrideConfig?: SyncConfig, requireExisting = false, lockHeld = false) => {
     const run = async () => {
-    if (!SYNC_RELAY_CONFIGURED) {
+    if (!SYNC_RELAY_CONFIGURED || !isNativeApp()) {
       setSyncStatus("error");
       throw new Error("Encrypted sync relay is not configured for this release.");
     }
@@ -777,13 +778,13 @@ export default function Home() {
   useEffect(() => { performSyncRef.current = performSync; }, [performSync]);
 
   useEffect(() => {
-    if (!SYNC_RELAY_CONFIGURED || !hydrated || !syncRoomId) return;
+    if (!syncAvailable || !hydrated || !syncRoomId) return;
     const timer = window.setTimeout(() => void performSync().catch(() => undefined), 1600);
     return () => window.clearTimeout(timer);
-  }, [hydrated, performSync, syncFingerprint, syncRoomId]);
+  }, [hydrated, performSync, syncAvailable, syncFingerprint, syncRoomId]);
 
   useEffect(() => {
-    if (!SYNC_RELAY_CONFIGURED || !syncRoomId) return;
+    if (!syncAvailable || !syncRoomId) return;
     const trigger = () => void performSync().catch(() => undefined);
     const onOffline = () => setSyncStatus("offline");
     const onVisibility = () => { if (document.visibilityState === "visible") trigger(); };
@@ -791,7 +792,7 @@ export default function Home() {
     window.addEventListener("focus", trigger);
     window.addEventListener("offline", onOffline);
     document.addEventListener("visibilitychange", onVisibility);
-    const interval = window.setInterval(trigger, 120_000);
+    const interval = window.setInterval(trigger, 30_000);
     return () => {
       window.removeEventListener("online", trigger);
       window.removeEventListener("focus", trigger);
@@ -799,7 +800,7 @@ export default function Home() {
       document.removeEventListener("visibilitychange", onVisibility);
       window.clearInterval(interval);
     };
-  }, [performSync, syncRoomId]);
+  }, [performSync, syncAvailable, syncRoomId]);
 
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 761px)");
@@ -1016,7 +1017,7 @@ export default function Home() {
 
   async function createPrivateSync() {
     if (!syncConfigLoaded || connectingRef.current) return;
-    if (!SYNC_RELAY_CONFIGURED) {
+    if (!syncAvailable) {
       setSyncStatus("error");
       setNotice(tr("syncRelayUnavailable"));
       return;
@@ -1051,7 +1052,7 @@ export default function Home() {
   async function joinPrivateSync(event: FormEvent) {
     event.preventDefault();
     if (!syncConfigLoaded || connectingRef.current) return;
-    if (!SYNC_RELAY_CONFIGURED) {
+    if (!syncAvailable) {
       setSyncStatus("error");
       setNotice(tr("syncRelayUnavailable"));
       return;
@@ -1106,7 +1107,7 @@ export default function Home() {
   }
 
   async function manualSync() {
-    if (!SYNC_RELAY_CONFIGURED) {
+    if (!syncAvailable) {
       setSyncStatus("error");
       setNotice(tr("syncRelayUnavailable"));
       return;
@@ -1148,7 +1149,7 @@ export default function Home() {
       setSyncConfig(durableConfig);
       if (durableConfig) {
         setPairingCode(await formatPairingCode(durableConfig).catch(() => ""));
-        setSyncStatus(SYNC_RELAY_CONFIGURED ? (navigator.onLine ? "ready" : "offline") : "error");
+        setSyncStatus(syncAvailable ? (navigator.onLine ? "ready" : "offline") : "error");
       } else {
         setPairingCode("");
         setSyncStatus("off");
@@ -1159,7 +1160,7 @@ export default function Home() {
 
   async function removeEncryptedSyncCopy() {
     const config = syncConfigRef.current;
-    if (!SYNC_RELAY_CONFIGURED) {
+    if (!syncAvailable) {
       setSyncStatus("error");
       setNotice(tr("syncRelayUnavailable"));
       return;
@@ -1205,7 +1206,7 @@ export default function Home() {
       setSyncConfig(durableConfig);
       if (durableConfig) {
         setPairingCode(await formatPairingCode(durableConfig).catch(() => ""));
-        setSyncStatus(SYNC_RELAY_CONFIGURED ? (navigator.onLine ? "ready" : "offline") : "error");
+        setSyncStatus(syncAvailable ? (navigator.onLine ? "ready" : "offline") : "error");
       } else {
         setPairingCode("");
         setSyncStatus("off");
@@ -1264,8 +1265,8 @@ export default function Home() {
     { id: "android", title: "downloadAndroid", detail: "androidDetail" },
   ];
 
-  const encryptedSyncActive = SYNC_RELAY_CONFIGURED && Boolean(syncConfig);
-  const syncStatusLabel = !SYNC_RELAY_CONFIGURED ? tr("syncNotPublished") : syncStatus === "syncing" ? tr("syncing") : syncStatus === "offline" ? tr("syncOffline") : syncStatus === "error" ? tr("syncFailed") : syncConfig ? tr("syncReady") : tr("syncOff");
+  const encryptedSyncActive = syncAvailable && Boolean(syncConfig);
+  const syncStatusLabel = !syncAvailable ? tr(SYNC_RELAY_CONFIGURED ? "syncNativeOnly" : "syncNotPublished") : syncStatus === "syncing" ? tr("syncing") : syncStatus === "offline" ? tr("syncOffline") : syncStatus === "error" ? tr("syncFailed") : syncConfig ? tr("syncReady") : tr("syncOff");
   const syncBusy = connecting || syncStatus === "syncing" || !syncConfigLoaded;
   const selectedDuration = durationFor(mode, settings);
   const selectedDurationMaximum = TIMER_MINUTE_LIMITS[mode];
@@ -1369,12 +1370,12 @@ export default function Home() {
         <div className="section-intro"><div><p className="eyebrow">{tr("settingsKicker")}</p><h2>{tr("settingsTitle")}</h2></div></div>
         <div className="settings-grid">
           <section className="setting-card sync-card card">
-            <div className="sync-heading"><div><span className="setting-icon inline" aria-hidden="true">↔</span><div><p className="eyebrow">{tr(SYNC_RELAY_CONFIGURED ? "encryptedTagline" : "syncDesignTagline")}</p><h3>{tr("syncTitle")}</h3></div></div><span className={`sync-status ${syncStatus}`} role="status" aria-live="polite" aria-atomic="true">{syncStatusLabel}</span></div>
+            <div className="sync-heading"><div><span className="setting-icon inline" aria-hidden="true">↔</span><div><p className="eyebrow">{tr(syncAvailable ? "encryptedTagline" : SYNC_RELAY_CONFIGURED ? "syncNativeTagline" : "syncDesignTagline")}</p><h3>{tr("syncTitle")}</h3></div></div><span className={`sync-status ${syncStatus}`} role="status" aria-live="polite" aria-atomic="true">{syncStatusLabel}</span></div>
             <p>{tr("syncCopy")}</p>
             <p className="sync-scope">{tr("syncScope")}</p>
-            {!SYNC_RELAY_CONFIGURED ? <div className="browser-preview sync-disabled">
-              <strong>{tr("syncNotPublishedTitle")}</strong>
-              <p>{tr("syncRelayUnavailable")}</p>
+            {!syncAvailable ? <div className="browser-preview sync-disabled">
+              <strong>{tr(SYNC_RELAY_CONFIGURED ? "syncNativeOnlyTitle" : "syncNotPublishedTitle")}</strong>
+              <p>{tr(SYNC_RELAY_CONFIGURED ? "syncNativeOnlyCopy" : "syncRelayUnavailable")}</p>
               {syncConfig && <button className="secondary-button" disabled={syncBusy} onClick={disconnectPrivateSync}>{tr("disconnect")}</button>}
             </div> : syncConfig ? <div className="sync-connected">
               <label className="pairing-code"><span>{tr("syncCode")}</span><input id="pairing-code" type={showPairingCode ? "text" : "password"} readOnly value={pairingCode} spellCheck={false} autoComplete="off" aria-describedby="pairing-warning" /></label>

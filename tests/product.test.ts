@@ -38,16 +38,23 @@ test("browser preview is not offered as an installable or offline PWA", async ()
   assert.match(translations.zh.browserPreviewCopy, /不再提供可安裝或離線使用的 Web App/);
 });
 
-test("product is account-free and local-first while an unconfigured relay stays disabled", async () => {
+test("product is account-free and local-first while encrypted sync stays native-only", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const localStore = await readFile(new URL("../app/lib/local-store.ts", import.meta.url), "utf8");
   const privateSync = await readFile(new URL("../app/lib/private-sync.ts", import.meta.url), "utf8");
   const runtime = await readFile(new URL("../app/lib/native-runtime.ts", import.meta.url), "utf8");
+  const nativeHtml = await readFile(new URL("../native/index.html", import.meta.url), "utf8");
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   await assert.rejects(readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"), { code: "ENOENT" });
   assert.doesNotMatch(page, /signin-with-chatgpt|signout-with-chatgpt/);
-  assert.match(runtime, /SYNC_RELAY_CONFIGURED = false/);
-  assert.match(page, /if \(!SYNC_RELAY_CONFIGURED \|\| !hydrated \|\| !syncRoomId\) return/);
-  assert.match(page, /syncNotPublishedTitle/);
+  assert.match(runtime, /SYNC_RELAY_CONFIGURED = packageMetadata\.afterglow\.syncRelayConfigured === true && validSyncEndpoint/);
+  assert.equal(packageJson.afterglow.syncRelayConfigured, true);
+  assert.equal(packageJson.afterglow.syncEndpoint, "https://afterglow-private-sync.sirius823935.workers.dev/api/private-sync");
+  assert.match(nativeHtml, /connect-src[^\"]*https:\/\/afterglow-private-sync\.sirius823935\.workers\.dev/);
+  assert.match(page, /const syncAvailable = SYNC_RELAY_CONFIGURED && nativeApp/);
+  assert.match(page, /if \(!syncAvailable \|\| !hydrated \|\| !syncRoomId\) return/);
+  assert.match(page, /setInterval\(trigger, 30_000\)/);
+  assert.match(page, /syncNativeOnlyTitle/);
   assert.match(localStore, /indexedDB\.open/);
   assert.match(localStore, /__afterglowSyncRecord/);
   assert.match(localStore, /expectedIdentity/);
@@ -91,6 +98,11 @@ test("desktop shell is sandboxed and exposes only storage plus encrypted-sync IP
   assert.match(main, /sandbox: true/);
   assert.match(main, /nodeIntegration: false/);
   assert.match(main, /webSecurity: true/);
+  assert.match(main, /show: true/);
+  assert.doesNotMatch(main, /ready-to-show/);
+  assert.match(main, /app\.whenReady\(\)\.then/);
+  assert.doesNotMatch(main, /await app\.whenReady\(\)/);
+  assert.match(main, /app\.isPackaged \? app\.getAppPath\(\) : path\.resolve\(import\.meta\.dirname, "\.\."\)/);
   assert.match(main, /setWindowOpenHandler\(\(\) => \(\{ action: "deny" \}\)\)/);
   assert.match(main, /will-navigate[\s\S]*event\.preventDefault\(\)/);
   assert.match(main, /requestSingleInstanceLock\(\)/);
