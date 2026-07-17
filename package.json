@@ -89,6 +89,7 @@
     "linux": {
       "icon": "public/icon-512.png",
       "category": "Utility",
+      "maintainer": "SiriusW823 <176094058+SiriusW823@users.noreply.github.com>",
       "target": [
         "AppImage",
         "deb"
