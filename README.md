@@ -4,22 +4,31 @@ Afterglow is a bilingual, local-first focus companion that turns completed work 
 
 The website is now only a browser preview and native-download center. It is deliberately **not** offered as an installable or offline PWA: there is no Web App manifest, Service Worker, browser installation prompt, or offline app shell. Browser storage is best-effort and is not the supported place for durable records.
 
-**Planned public site:** `https://OWNER.github.io/REPOSITORY/` (filled automatically after the real public repository is connected and GitHub Pages is deployed)
+**Public preview and download center:** https://siriusw823.github.io/afterglow/
+
+**Source repository:** https://github.com/SiriusW823/afterglow
+
+**Current release:** https://github.com/SiriusW823/afterglow/releases/tag/v0.1.0
 
 ## Current release status
 
-This repository contains the application and packaging paths, but the public release is not finished yet:
+Version `v0.1.0` is published from the public repository. GitHub Pages exposes only the preview and the same native artifacts attached to the GitHub Release:
 
-| Area | Current fact | Required before claiming public availability |
+| Area | Current fact | Remaining limitation |
 | --- | --- | --- |
-| Website | `.github/workflows/pages.yml` builds the static Vite renderer and deploys it with GitHub Pages. It has not run because this checkout has no Git remote. | Connect the real repository, enable Pages with GitHub Actions as its source, deploy, and verify in a signed-out browser. |
+| Website | GitHub Pages is live at `https://siriusw823.github.io/afterglow/`; its Windows, Linux, and Android buttons resolve to the published `v0.1.0` Release assets. | It is a browser preview/download center, not a PWA or durable-data product. |
 | Encrypted sync | Client crypto, merge logic, the reference Worker relay, Electron bridge, and Capacitor binary adapter are implemented and tested. No relay is configured in the shipped UI, so no sync traffic is sent. | Independently host and audit a public relay, configure a new endpoint, then run real two-device create/join/update/delete tests before describing sync as available. |
-| Windows x64 | A local unsigned NSIS preview installer has been built successfully. It is not attached to a public GitHub Release. | Connect the real repository, publish a versioned Release, and disclose the SmartScreen/code-signing limitation. |
-| Linux x64 | The GitHub Actions workflow can build AppImage and `.deb` files, but no public artifact has been published. | Run the workflow in the connected repository and verify both files. |
-| Android | The workflow can build a debug-signed sideload APK for Android 8.0/API 26 or newer, but no public APK has been published. | Publish and test the APK. A stable private signing key is still needed for reliable in-place updates. |
+| Windows x64 | The unsigned NSIS installer is published as `afterglow-0.1.0-windows-x64.exe`. | It may trigger SmartScreen because it is not code-signed; clean-device installation still needs manual verification. |
+| Linux x64 | AppImage and `.deb` packages are published for x64. | Clean-device installation still needs manual verification. |
+| Android | A debug-signed sideload APK is published for Android 8.0/API 26 or newer. | Clean-device installation still needs manual verification. A stable private signing key is needed for reliable in-place updates. |
 | iOS/iPadOS | Capacitor/Xcode source exists; there is no installable iOS artifact. | Build on macOS and complete Apple signing and an appropriate distribution path. |
 
-The checkout currently has no Git remote, `gh auth status` reports an invalid credential, and `public/downloads/availability.json` therefore remains empty. No GitHub owner/repository name or download URL is guessed.
+The Release also includes `afterglow-0.1.0-SHA256SUMS.txt` and a generated `availability.json`. CI reported these installer checksums:
+
+- Windows EXE: `0edaa899127899bd22fe70b058cfec47800dd696ceeaed92a002a8a178facb1f`
+- Linux AppImage: `496ef0b0256afe906f14bc3ac1b5902f4a57492d961f676078640a2c5deffe82`
+- Linux `.deb`: `0fcec197b84ee62212a49f682aea8ff1b9c1916d10bda479051ddd67d315f848`
+- Android APK: `272592d2e8cd330951233795713cd4647146b31dbb3d5dc340cf217ef3938a2d`
 
 ## Product principles
 
@@ -74,7 +83,7 @@ When Android/iOS notification permission is granted, starting or resuming a time
 - The app does not register a Service Worker or handle `beforeinstallprompt`.
 - There is no supported browser offline launch or Add-to-Home-Screen installation flow.
 - Browser storage can be used to evaluate the interface, but it is not guaranteed durable storage.
-- The website is intended to become a public preview and download center for the native EXE, Linux packages, and APK.
+- The website is the public preview and download center for the native EXE, Linux packages, and APK.
 
 ## Keyboard shortcuts
 
@@ -162,16 +171,16 @@ The tag must match `package.json`, and Android `versionName` must match it. A pu
 
 `.github/workflows/pages.yml` builds `native-dist/`, adds the static metadata files, and deploys the artifact through GitHub Pages. On every successful native-release workflow run, it checks whether the matching GitHub Release exists and regenerates `native-dist/downloads/availability.json` with direct EXE, AppImage, and APK links. Until those real files exist, the interface truthfully displays “Installer not available yet.”
 
-This checkout still has no Git remote and its GitHub CLI credential is invalid, so neither workflow has published anything. After connecting and authenticating the real public repository:
+The repository is connected at `SiriusW823/afterglow`, Pages uses GitHub Actions as its source, and the `v0.1.0` native release workflow has published all four platform files. To publish a future version:
 
-1. Push `main` and set **Settings → Pages → Source** to **GitHub Actions**.
-2. Push the matching `v0.1.0` tag or manually run **Native release builds** with `release_tag` set to `v0.1.0`.
-3. Verify the EXE, AppImage, `.deb`, APK, checksum file, and direct website buttons in a signed-out browser.
+1. Update the package and Android versions together and push `main`.
+2. Push the matching `vX.Y.Z` tag or manually run **Native release builds** with that `release_tag`.
+3. Verify the EXE, AppImage, `.deb`, APK, checksum file, and regenerated website buttons on clean devices.
 
 For local inspection of the exact metadata that the workflow will generate:
 
 ```bash
-node scripts/release-metadata.mjs --repository OWNER/REPOSITORY --tag v0.1.0 --output native-dist/downloads/availability.json
+node scripts/release-metadata.mjs --repository SiriusW823/afterglow --tag v0.1.0 --output native-dist/downloads/availability.json
 ```
 
 `node scripts/release-metadata.mjs --check` validates the shared package/Android version and rejects a mismatched release tag.
@@ -185,7 +194,7 @@ npm run build
 npm run pages:build
 ```
 
-The automated suite covers the non-PWA browser-preview contract, GitHub Pages paths, disabled retired-relay behavior, timer recovery, five-minute duration steps, timer-rhythm placement, translations, statistics, native storage/export contracts, scheduled native notifications, Android API 26, CapacitorHttp binary transport, encrypted pairing and AES-GCM envelopes, deterministic merge behavior, 4 MiB relay limits, conditional relay writes, and release metadata. Real device packaging, public Pages/download URLs, relay publication, and signed distribution still require external verification.
+The automated suite covers the non-PWA browser-preview contract, GitHub Pages paths, disabled retired-relay behavior, timer recovery, five-minute duration steps, timer-rhythm placement, translations, statistics, native storage/export contracts, scheduled native notifications, Android API 26, CapacitorHttp binary transport, encrypted pairing and AES-GCM envelopes, deterministic merge behavior, 4 MiB relay limits, conditional relay writes, and release metadata. The public Pages/download URLs and CI packaging are verified; clean-device installation, relay publication, iOS distribution, and signed desktop/Android distribution still require external verification.
 
 ## Project structure
 
