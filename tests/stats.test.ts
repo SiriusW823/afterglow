@@ -25,7 +25,8 @@ test("focus streak may continue from yesterday before today's first session", ()
 });
 
 test("best focus hour returns the hour with the most minutes", () => {
-  assert.equal(bestFocusHour(sessions), 9);
+  const expectedLocalHour = new Date(sessions[0].completedAt).getHours();
+  assert.equal(bestFocusHour(sessions), expectedLocalHour);
   assert.equal(bestFocusHour([]), null);
 });
 
